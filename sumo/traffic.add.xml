@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/additional_file.xsd">
+    
+    <laneAreaDetector id="det_N2C_0" lane="N2C_0" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+    <laneAreaDetector id="det_N2C_1" lane="N2C_1" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+
+    <laneAreaDetector id="det_S2C_0" lane="S2C_0" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+    <laneAreaDetector id="det_S2C_1" lane="S2C_1" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+
+    <laneAreaDetector id="det_E2C_0" lane="E2C_0" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+    <laneAreaDetector id="det_E2C_1" lane="E2C_1" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+
+    <laneAreaDetector id="det_W2C_0" lane="W2C_0" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+    <laneAreaDetector id="det_W2C_1" lane="W2C_1" pos="-50" endPos="-1" freq="10" file="detector_output.xml"/>
+
+</additional>

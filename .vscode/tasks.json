@@ -1,0 +1,19 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Compile SUMO Network",
+            "type": "shell",
+            "command": "netconvert",
+            "args": [
+                "--node-files=sumo/nodes.nod.xml",
+                "--edge-files=sumo/edges.edg.xml",
+                "--output-file=sumo/network.net.xml"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}

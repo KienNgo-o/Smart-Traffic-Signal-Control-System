@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<routes xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://sumo.dlr.de/xsd/routes_file.xsd">
+    
+<vTypeDistribution id="vietnam_mixed_traffic">
+        <vType id="car" vClass="passenger" length="5.0" accel="2.6" decel="4.5" maxSpeed="20.0" probability="0.60"/>
+        <vType id="moto" vClass="motorcycle" length="2.0" accel="4.0" decel="5.0" maxSpeed="22.0" tau="1.0" probability="0.25"/>
+        <vType id="bus" vClass="bus" length="12.0" accel="1.2" decel="2.5" maxSpeed="15.0" probability="0.10"/>
+        <vType id="truck" vClass="truck" length="15.0" accel="1.0" decel="2.0" maxSpeed="15.0" probability="0.05"/>
+    </vTypeDistribution>
+    <flow id="flow_off_N2S" type="vietnam_mixed_traffic" begin="0" end="3600" from="N2C" to="C2S" probability="0.05"/>
+    <flow id="flow_off_S2N" type="vietnam_mixed_traffic" begin="0" end="3600" from="S2C" to="C2N" probability="0.05"/>
+    <flow id="flow_off_E2W" type="vietnam_mixed_traffic" begin="0" end="3600" from="E2C" to="C2W" probability="0.05"/>
+    <flow id="flow_off_W2E" type="vietnam_mixed_traffic" begin="0" end="3600" from="W2C" to="C2E" probability="0.05"/>
+
+    <flow id="flow_peak_N2S" type="vietnam_mixed_traffic" begin="3600" end="7200" from="N2C" to="C2S" probability="0.30"/>
+    <flow id="flow_peak_S2N" type="vietnam_mixed_traffic" begin="3600" end="7200" from="S2C" to="C2N" probability="0.30"/>
+    <flow id="flow_peak_E2W" type="vietnam_mixed_traffic" begin="3600" end="7200" from="E2C" to="C2W" probability="0.30"/>
+    <flow id="flow_peak_W2E" type="vietnam_mixed_traffic" begin="3600" end="7200" from="W2C" to="C2E" probability="0.30"/>
+
+</routes>

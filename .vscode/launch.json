@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Train RL Agent",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/agent/train.py",
+            "console": "integratedTerminal",
+            "env": {
+                "LIBSUMO_AS_TRACI": "1"
+            }
+        }
+    ]
+}

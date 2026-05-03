@@ -1,10 +1,14 @@
-import os
-import sys
-import shutil
+import argparse
 import csv
-import torch
-import matplotlib.pyplot as plt
+import os
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
 import xml.etree.ElementTree as ET
+
+import matplotlib.pyplot as plt
+import torch
 
 from env.sumo_env import SumoEnv
 from agent.dqn import D3QNAgent
@@ -12,35 +16,71 @@ from utils.seed import set_global_seed
 from utils.metrics import evaluate_tripinfo_advanced, evaluate_queue
 
 
-if 'LIBSUMO_AS_TRACI' in os.environ:
+if "LIBSUMO_AS_TRACI" in os.environ:
     import libsumo as traci
 else:
     import traci
 
 
 SIM_DURATION = 7200.0
+MASTER_RESULTS_FILE = Path("master_evaluation_results.csv")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Evaluate one D3QN experiment folder against Webster baseline."
+    )
+    parser.add_argument(
+        "experiment_dir",
+        nargs="?",
+        default=None,
+        help="Path to a run folder, e.g. runs/exp_20260502_143000",
+    )
+    parser.add_argument("--seed", type=int, default=42, help="SUMO/evaluation seed.")
+    parser.add_argument("--base-cfg", default="sumo/scenario.sumocfg", help="Base SUMO config.")
+    parser.add_argument(
+        "--model-name",
+        default="dueling_dqn_final.pth",
+        help="Model filename inside the experiment folder.",
+    )
+    return parser.parse_args()
+
+
+def resolve_experiment_dir(experiment_dir):
+    if experiment_dir:
+        run_dir = Path(experiment_dir)
+    else:
+        runs = sorted(Path("runs").glob("exp_*"))
+        if not runs:
+            sys.exit("ERROR: No runs/exp_* folders found. Pass an experiment folder explicitly.")
+        run_dir = runs[-1]
+
+    if not run_dir.exists() or not run_dir.is_dir():
+        sys.exit(f"ERROR: Experiment folder not found: {run_dir}")
+
+    return run_dir
 
 
 def create_webster_sumocfg(base_cfg_path, webster_cfg_path):
     """Create a SUMO config that swaps the RL traffic-light plan for Webster."""
     tree = ET.parse(base_cfg_path)
     root = tree.getroot()
-    for input_tag in root.findall('input'):
-        for add_tag in input_tag.findall('additional-files'):
-            val = add_tag.get('value')
+    for input_tag in root.findall("input"):
+        for add_tag in input_tag.findall("additional-files"):
+            val = add_tag.get("value")
             if val:
-                add_tag.set('value', val.replace('tls.add.xml', 'tls_webster.add.xml'))
+                add_tag.set("value", val.replace("tls.add.xml", "tls_webster.add.xml"))
     tree.write(webster_cfg_path)
 
 
-def run_webster(seed, cfg_path):
+def run_webster(seed, cfg_path, eval_dir):
     """Run the Webster fixed-time baseline and return advanced metrics."""
     set_global_seed(seed)
 
-    tripinfo_file = "sumo/tripinfo_webster.xml"
+    tripinfo_file = eval_dir / "tripinfo_webster.xml"
     cmd = [
         "sumo", "-c", cfg_path,
-        "--tripinfo-output", tripinfo_file,
+        "--tripinfo-output", str(tripinfo_file.resolve()),
         "--tripinfo-output.write-unfinished", "true",
         "--device.emissions.probability", "1.0",
         "--time-to-teleport", "300",
@@ -53,22 +93,22 @@ def run_webster(seed, cfg_path):
         traci.simulationStep()
     traci.close()
 
-    detector_file = "sumo/detector_webster.xml"
+    detector_file = eval_dir / "detector_webster.xml"
     if os.path.exists("sumo/detector_output.xml"):
         shutil.copy("sumo/detector_output.xml", detector_file)
 
-    metrics = evaluate_tripinfo_advanced(tripinfo_file, sim_duration=SIM_DURATION)
-    metrics["avg_queue_length"] = evaluate_queue(detector_file)
+    metrics = evaluate_tripinfo_advanced(str(tripinfo_file), sim_duration=SIM_DURATION)
+    metrics["avg_queue_length"] = evaluate_queue(str(detector_file))
     return metrics
 
 
-def run_rl(model_path, seed, cfg_path):
+def run_rl(model_path, seed, cfg_path, eval_dir):
     """Run the trained D3QN agent and return advanced metrics."""
     set_global_seed(seed)
 
     env = SumoEnv(cfg_path, use_gui=False, max_steps=int(SIM_DURATION))
-    tripinfo_file = "sumo/tripinfo_rl.xml"
-    raw_state, _ = env.reset(seed=seed, options={"tripinfo": tripinfo_file})
+    tripinfo_file = eval_dir / "tripinfo_rl.xml"
+    raw_state, _ = env.reset(seed=seed, options={"tripinfo": str(tripinfo_file.resolve())})
 
     num_lanes = len(env.controller.lanes)
     num_phases = env.controller.num_phases
@@ -92,12 +132,12 @@ def run_rl(model_path, seed, cfg_path):
 
     env.close()
 
-    detector_file = "sumo/detector_rl.xml"
+    detector_file = eval_dir / "detector_rl.xml"
     if os.path.exists("sumo/detector_output.xml"):
         shutil.copy("sumo/detector_output.xml", detector_file)
 
-    metrics = evaluate_tripinfo_advanced(tripinfo_file, sim_duration=SIM_DURATION)
-    metrics["avg_queue_length"] = evaluate_queue(detector_file)
+    metrics = evaluate_tripinfo_advanced(str(tripinfo_file), sim_duration=SIM_DURATION)
+    metrics["avg_queue_length"] = evaluate_queue(str(detector_file))
     return metrics
 
 
@@ -109,15 +149,80 @@ def percent_change(baseline, candidate, lower_is_better=True):
     return ((candidate - baseline) / baseline) * 100.0
 
 
-def save_metrics_csv(webster_metrics, rl_metrics, filename="eval/advanced_metrics.csv"):
-    os.makedirs(os.path.dirname(filename), exist_ok=True)
+def save_metrics_csv(webster_metrics, rl_metrics, filename):
     keys = sorted(set(webster_metrics) | set(rl_metrics))
     with open(filename, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(["metric", "webster", "d3qn"])
         for key in keys:
             writer.writerow([key, webster_metrics.get(key, 0.0), rl_metrics.get(key, 0.0)])
-    print(f"[+] Saved advanced metrics CSV: {filename}")
+    print(f"[+] Saved per-run metrics CSV: {filename}")
+
+
+def append_master_results(run_dir, model_path, seed, webster_metrics, rl_metrics):
+    row = {
+        "timestamp": datetime.now().isoformat(timespec="seconds"),
+        "experiment": run_dir.name,
+        "experiment_dir": str(run_dir),
+        "model_path": str(model_path),
+        "seed": seed,
+        "avg_wait_webster": webster_metrics.get("avg_waiting_time", 0.0),
+        "avg_wait_d3qn": rl_metrics.get("avg_waiting_time", 0.0),
+        "avg_wait_improvement_pct": percent_change(
+            webster_metrics.get("avg_waiting_time", 0.0),
+            rl_metrics.get("avg_waiting_time", 0.0),
+            lower_is_better=True,
+        ),
+        "p95_wait_webster": webster_metrics.get("p95_waiting_time", 0.0),
+        "p95_wait_d3qn": rl_metrics.get("p95_waiting_time", 0.0),
+        "p95_wait_improvement_pct": percent_change(
+            webster_metrics.get("p95_waiting_time", 0.0),
+            rl_metrics.get("p95_waiting_time", 0.0),
+            lower_is_better=True,
+        ),
+        "avg_time_loss_webster": webster_metrics.get("avg_time_loss", 0.0),
+        "avg_time_loss_d3qn": rl_metrics.get("avg_time_loss", 0.0),
+        "avg_time_loss_improvement_pct": percent_change(
+            webster_metrics.get("avg_time_loss", 0.0),
+            rl_metrics.get("avg_time_loss", 0.0),
+            lower_is_better=True,
+        ),
+        "avg_queue_webster": webster_metrics.get("avg_queue_length", 0.0),
+        "avg_queue_d3qn": rl_metrics.get("avg_queue_length", 0.0),
+        "avg_queue_improvement_pct": percent_change(
+            webster_metrics.get("avg_queue_length", 0.0),
+            rl_metrics.get("avg_queue_length", 0.0),
+            lower_is_better=True,
+        ),
+        "throughput_webster": webster_metrics.get("throughput", 0),
+        "throughput_d3qn": rl_metrics.get("throughput", 0),
+        "throughput_improvement_pct": percent_change(
+            webster_metrics.get("throughput", 0.0),
+            rl_metrics.get("throughput", 0.0),
+            lower_is_better=False,
+        ),
+        "throughput_per_hour_webster": webster_metrics.get("throughput_per_hour", 0.0),
+        "throughput_per_hour_d3qn": rl_metrics.get("throughput_per_hour", 0.0),
+        "jain_fairness_webster": webster_metrics.get("jain_fairness", 0.0),
+        "jain_fairness_d3qn": rl_metrics.get("jain_fairness", 0.0),
+        "co2_per_vehicle_webster": webster_metrics.get("avg_co2_mg_per_completed_vehicle", 0.0),
+        "co2_per_vehicle_d3qn": rl_metrics.get("avg_co2_mg_per_completed_vehicle", 0.0),
+        "fuel_per_vehicle_webster": webster_metrics.get("avg_fuel_mg_per_completed_vehicle", 0.0),
+        "fuel_per_vehicle_d3qn": rl_metrics.get("avg_fuel_mg_per_completed_vehicle", 0.0),
+        "nox_per_vehicle_webster": webster_metrics.get("avg_nox_mg_per_completed_vehicle", 0.0),
+        "nox_per_vehicle_d3qn": rl_metrics.get("avg_nox_mg_per_completed_vehicle", 0.0),
+        "unfinished_webster": webster_metrics.get("unfinished_trips", 0),
+        "unfinished_d3qn": rl_metrics.get("unfinished_trips", 0),
+    }
+
+    file_exists = MASTER_RESULTS_FILE.exists()
+    with open(MASTER_RESULTS_FILE, "a", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=list(row.keys()))
+        if not file_exists:
+            writer.writeheader()
+        writer.writerow(row)
+
+    print(f"[+] Appended master result: {MASTER_RESULTS_FILE}")
 
 
 def print_summary(webster_metrics, rl_metrics):
@@ -143,10 +248,13 @@ def print_summary(webster_metrics, rl_metrics):
         r_val = rl_metrics.get(key, 0.0)
         delta = percent_change(w_val, r_val, lower_is_better)
         unit_suffix = f" {unit}" if unit else ""
-        print(f"{label:34s} | Webster: {w_val:10.3f}{unit_suffix:6s} | D3QN: {r_val:10.3f}{unit_suffix:6s} | Improvement: {delta:8.2f}%")
+        print(
+            f"{label:34s} | Webster: {w_val:10.3f}{unit_suffix:6s} | "
+            f"D3QN: {r_val:10.3f}{unit_suffix:6s} | Improvement: {delta:8.2f}%"
+        )
 
 
-def plot_comparison(webster_metrics, rl_metrics):
+def plot_comparison(webster_metrics, rl_metrics, output_path):
     labels = ["Webster", "D3QN"]
     plot_metrics = [
         ("avg_waiting_time", "Avg Wait", "s", ".1f"),
@@ -186,30 +294,39 @@ def plot_comparison(webster_metrics, rl_metrics):
                 fontweight="bold",
             )
 
-    os.makedirs("eval", exist_ok=True)
     plt.tight_layout(rect=(0, 0, 1, 0.94))
-    plt.savefig("eval/evaluation_dashboard.png", dpi=300)
-    print("[+] Saved evaluation dashboard: eval/evaluation_dashboard.png")
+    plt.savefig(output_path, dpi=300)
+    plt.close()
+    print(f"[+] Saved evaluation dashboard: {output_path}")
+
+
+def main():
+    args = parse_args()
+    run_dir = resolve_experiment_dir(args.experiment_dir)
+    eval_dir = run_dir / "evaluation"
+    eval_dir.mkdir(parents=True, exist_ok=True)
+
+    model_path = run_dir / args.model_name
+    if not model_path.exists():
+        sys.exit(f"ERROR: Model not found: {model_path}")
+
+    webster_cfg = "sumo/scenario_webster.sumocfg"
+    create_webster_sumocfg(args.base_cfg, webster_cfg)
+
+    print(f"Experiment: {run_dir}")
+    print(f"Model: {model_path}")
+    print("=" * 50)
+    print("STEP 1: Evaluating Webster baseline...")
+    webster_metrics = run_webster(args.seed, webster_cfg, eval_dir)
+
+    print("\nSTEP 2: Evaluating D3QN agent...")
+    rl_metrics = run_rl(model_path, args.seed, args.base_cfg, eval_dir)
+
+    print_summary(webster_metrics, rl_metrics)
+    save_metrics_csv(webster_metrics, rl_metrics, eval_dir / "advanced_metrics.csv")
+    plot_comparison(webster_metrics, rl_metrics, eval_dir / "evaluation_dashboard.png")
+    append_master_results(run_dir, model_path, args.seed, webster_metrics, rl_metrics)
 
 
 if __name__ == "__main__":
-    SEED = 42
-    BASE_CFG = "sumo/scenario.sumocfg"
-    WEBSTER_CFG = "sumo/scenario_webster.sumocfg"
-    MODEL_PATH = "models/d3qn_per_final.pth"
-
-    if not os.path.exists(MODEL_PATH):
-        sys.exit(f"ERROR: Model not found at {MODEL_PATH}. Please run train.py first.")
-
-    create_webster_sumocfg(BASE_CFG, WEBSTER_CFG)
-
-    print("=" * 50)
-    print("STEP 1: Evaluating Webster baseline...")
-    webster_metrics = run_webster(SEED, WEBSTER_CFG)
-
-    print("\nSTEP 2: Evaluating D3QN agent...")
-    rl_metrics = run_rl(MODEL_PATH, SEED, BASE_CFG)
-
-    print_summary(webster_metrics, rl_metrics)
-    save_metrics_csv(webster_metrics, rl_metrics)
-    plot_comparison(webster_metrics, rl_metrics)
+    main()

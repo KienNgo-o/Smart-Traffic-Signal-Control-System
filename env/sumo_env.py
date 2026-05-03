@@ -56,8 +56,25 @@ class SumoEnv(gym.Env):
         
         # Tracking metrics
         self.prev_total_wait = 0.0
+        self.prev_total_time_loss = 0.0
         self.prev_phi = 0.0 
         self.sumo_running = False
+
+    def _get_active_vehicle_metrics(self):
+        """Collect active-vehicle metrics on controlled incoming lanes."""
+        vehicle_ids = set()
+        for lane in self.controller.lanes:
+            vehicle_ids.update(self.sumo_engine.lane.getLastStepVehicleIDs(lane))
+
+        vehicle_count = len(vehicle_ids)
+        total_time_loss = 0.0
+        for veh_id in vehicle_ids:
+            try:
+                total_time_loss += self.sumo_engine.vehicle.getTimeLoss(veh_id)
+            except Exception:
+                continue
+
+        return vehicle_count, total_time_loss
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
@@ -92,6 +109,7 @@ class SumoEnv(gym.Env):
         
         self.controller.setup()
         self.prev_total_wait = 0.0
+        self.prev_total_time_loss = 0.0
         self.prev_phi = 0.0
         
         obs = self.controller.get_state()
@@ -108,24 +126,46 @@ class SumoEnv(gym.Env):
         queues = next_state[:num_lanes]
         waits = next_state[num_lanes:2*num_lanes]
         
-        # 4. CHUẨN HÓA REWARD TRÁNH HACKING
+        # 4. Reward aligned with evaluation: average waiting time and time loss.
         current_total_wait = np.sum(waits)
+        vehicle_count, current_total_time_loss = self._get_active_vehicle_metrics()
+        normalizer = max(1, vehicle_count)
+
+        avg_active_wait = current_total_wait / normalizer
+        avg_active_time_loss = current_total_time_loss / normalizer
+        max_lane_wait = float(np.max(waits)) if len(waits) else 0.0
+
         wait_diff = self.prev_total_wait - current_total_wait
+        time_loss_diff = self.prev_total_time_loss - current_total_time_loss
         self.prev_total_wait = current_total_wait
+        self.prev_total_time_loss = current_total_time_loss
         
-        queue_penalty = -0.1 * np.sum(queues)
-        switch_penalty = -2.0 if action == 1 else 0.0
-        
-        base_reward = (wait_diff * 0.01) + queue_penalty + switch_penalty
+        mean_wait_penalty = -0.35 * avg_active_wait
+        time_loss_penalty = -0.25 * avg_active_time_loss
+        delta_wait_reward = 0.02 * wait_diff
+        delta_time_loss_reward = 0.01 * time_loss_diff
+        tail_wait_penalty = -0.03 * max_lane_wait
+        queue_penalty = -0.02 * np.sum(queues)
+        switch_penalty = -0.30 if action == 1 else 0.0
+
+        base_reward = (
+            mean_wait_penalty
+            + time_loss_penalty
+            + delta_wait_reward
+            + delta_time_loss_reward
+            + tail_wait_penalty
+            + queue_penalty
+            + switch_penalty
+        )
         
         # PBRS (Potential-Based Reward Shaping) cho Semi-MDP:
         # dùng cùng gamma^duration với target Q-learning.
         discount = self.reward_gamma ** float(duration)
-        current_phi = -np.sum(queues)
+        current_phi = -((0.65 * avg_active_wait) + (0.35 * avg_active_time_loss))
         pbrs_term = (discount * current_phi) - self.prev_phi
         self.prev_phi = current_phi
         
-        total_reward = base_reward + (pbrs_term * 0.1) 
+        total_reward = base_reward + (pbrs_term * 0.05) 
         
         # 5. ĐIỀU KIỆN KẾT THÚC CHUẨN XÁC
         terminated = self.sumo_engine.simulation.getMinExpectedNumber() <= 0
@@ -134,6 +174,9 @@ class SumoEnv(gym.Env):
         info = {
             "step": self.current_step,
             "total_wait": current_total_wait,
+            "avg_active_wait": avg_active_wait,
+            "total_time_loss": current_total_time_loss,
+            "avg_active_time_loss": avg_active_time_loss,
             "total_queue": np.sum(queues),
             "action_duration": duration # Truyền log thời gian ra ngoài
         }

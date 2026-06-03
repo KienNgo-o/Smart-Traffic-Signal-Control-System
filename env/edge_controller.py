@@ -5,9 +5,10 @@ class EdgeController:
     Bộ điều khiển biên (Edge Actuator) quản lý vòng lặp vật lý và an toàn cấp thấp.
     Đã sửa lỗi ghi đè string và đồng bộ Step.
     """
-    def __init__(self, tls_id, engine, yellow_time=4, all_red_time=2, min_green=10):
+    def __init__(self, tls_id, engine, yellow_time=4, all_red_time=2, min_green=10, training_mode=True):
         self.tls_id = tls_id
         self.engine = engine 
+        self.training_mode = training_mode # [MODIFIED - Task1] Toggle queue noise off during deterministic evaluation.
         
         self.yellow_time = yellow_time
         self.all_red_time = all_red_time
@@ -50,8 +51,12 @@ class EdgeController:
         current_phase = self.engine.trafficlight.getPhase(self.tls_id)
         
         # Tiêm nhiễu Gaussian
-        noise = np.random.normal(0, 0.5, len(queues))
-        noisy_queues = np.clip(np.array(queues) + noise, 0, None).astype(np.float32)
+        # [MODIFIED - Task1] Only inject Gaussian queue noise while training.
+        if self.training_mode:
+            noise = np.random.normal(0, 0.5, len(queues))
+            noisy_queues = np.clip(np.array(queues) + noise, 0, None).astype(np.float32)
+        else:
+            noisy_queues = np.array(queues, dtype=np.float32)
         
         state = np.concatenate((noisy_queues, np.array(waits, dtype=np.float32), [float(current_phase)]))
         return state

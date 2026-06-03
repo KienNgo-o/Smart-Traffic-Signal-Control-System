@@ -203,6 +203,7 @@ def train(args=None):
             "average_loss",
             "updates",
             "buffer_size",
+            "switch_rate", # [MODIFIED - Task2] Append action switch-rate metric while preserving existing columns.
         ])
 
         for episode in range(1, hparams["num_episodes"] + 1):
@@ -210,11 +211,11 @@ def train(args=None):
             state = agent.preprocess_state(raw_state)
 
             total_reward = 0.0
+            switch_count = 0 # [MODIFIED - Task2] Count action==1 switches for this episode.
             step_count = 0
             update_count = 0
             episode_losses = []
             done = False
-
             while not done:
                 if np.random.rand() < epsilon:
                     action = env.action_space.sample()
@@ -232,6 +233,8 @@ def train(args=None):
 
                 state = next_state
                 total_reward += reward
+                if action == 1:
+                    switch_count += 1 # [MODIFIED - Task2] Track each phase-switch action.
                 step_count += 1
 
                 if (
@@ -273,6 +276,7 @@ def train(args=None):
 
             epsilon = max(hparams["epsilon_end"], epsilon * hparams["epsilon_decay"])
             avg_loss = float(np.mean(episode_losses)) if episode_losses else 0.0
+            switch_rate = switch_count / max(1, step_count) # [MODIFIED - Task2] Normalize switches by episode action steps.
             episode_rewards.append(total_reward)
 
             if episode % hparams["target_update_freq"] == 0:
@@ -287,6 +291,7 @@ def train(args=None):
                 f"{avg_loss:.8f}",
                 update_count,
                 buffer.tree.n_entries,
+                f"{switch_rate:.6f}", # [MODIFIED - Task2] Write switch_rate as the final CSV column.
             ])
             log_file.flush()
 
@@ -296,11 +301,13 @@ def train(args=None):
                 writer.add_scalar("train/avg_loss", avg_loss, episode)
                 writer.add_scalar("train/steps", step_count, episode)
                 writer.add_scalar("train/buffer_size", buffer.tree.n_entries, episode)
+                writer.add_scalar("train/switch_rate", switch_rate, episode) # [MODIFIED - Task2] Expose switch_rate in TensorBoard.
 
             print(
                 f"Episode {episode:03d} | Steps: {step_count:04d} | "
                 f"Reward: {total_reward:9.2f} | AvgLoss: {avg_loss:.6f} | "
-                f"Epsilon: {epsilon:.3f}"
+                f"Epsilon: {epsilon:.3f} | "
+                f"SwitchRate: {switch_rate:.3f}" # [MODIFIED - Task2] Print switch_rate for quick seed diagnostics.
             )
 
             if episode % hparams["checkpoint_freq"] == 0:

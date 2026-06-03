@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<additional>
+    <!-- # [MODIFIED - Task3] SUMO built-in actuated baseline TLS plan. -->
+    <tlLogic id="center" type="actuated" programID="actuated_baseline" offset="0">
+        
+        <!-- Pha xanh Bac-Nam: toi thieu 15s, toi da 60s -->
+        <phase duration="15" minDur="15" maxDur="60"
+               state="GGGggrrrrrGGGggrrrrr"/>
+        
+        <!-- Pha vang BN: co dinh 4s -->
+        <phase duration="4"  minDur="4"  maxDur="4"
+               state="yyyyyrrrrryyyyyrrrrr"/>
+        
+        <!-- All-red: co dinh 2s -->
+        <phase duration="2"  minDur="2"  maxDur="2"
+               state="rrrrrrrrrrrrrrrrrrrr"/>
+        
+        <!-- Pha xanh Dong-Tay: toi thieu 15s, toi da 60s -->
+        <phase duration="15" minDur="15" maxDur="60"
+               state="rrrrrGGGggrrrrrGGGgg"/>
+        
+        <!-- Pha vang DT: co dinh 4s -->
+        <phase duration="4"  minDur="4"  maxDur="4"
+               state="rrrrryyyyyrrrrryyyyy"/>
+        
+        <!-- All-red: co dinh 2s -->
+        <phase duration="2"  minDur="2"  maxDur="2"
+               state="rrrrrrrrrrrrrrrrrrrr"/>
+        
+        <!-- Actuated parameters: cam bien loop detector -->
+        <param key="max-gap"          value="3.0"/>
+        <param key="detector-gap"     value="2.0"/>
+        <param key="passing-time"     value="2.0"/>
+        <param key="show-detectors"   value="false"/>
+        <param key="file"             value="NUL"/>
+        
+    </tlLogic>
+</additional>

@@ -19,7 +19,7 @@ class SumoEnv(gym.Env):
     """
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 10}
 
-    def __init__(self, sumocfg_file, use_gui=False, max_steps=7200, reward_gamma=0.99):
+    def __init__(self, sumocfg_file, use_gui=False, max_steps=7200, reward_gamma=0.99, training_mode=True):
         super(SumoEnv, self).__init__()
         self.sumocfg = sumocfg_file
         self.use_gui = use_gui
@@ -38,19 +38,21 @@ class SumoEnv(gym.Env):
             
         # 2. Khởi tạo Edge Controller
         # Truyền sumo_engine vào để controller dùng chung một context
-        self.controller = EdgeController("center", engine=self.sumo_engine) 
+        self.controller = EdgeController(
+            "center",
+            engine=self.sumo_engine,
+            training_mode=training_mode # [MODIFIED - Task1] Forward training/eval mode to queue-noise controller.
+        ) 
         
         # Action Space: 0 = Keep Phase, 1 = Switch Phase
         self.action_space = spaces.Discrete(2)
         
         # 3. TỰ ĐỘNG HÓA OBSERVATION SPACE
-        num_lanes = len(self.controller.lanes)
-        obs_dim = (num_lanes * 2) + 1  # queue + wait per lane + 1 phase_id
-        
+        # [MODIFIED - Task1] Placeholder until SUMO starts and controller.setup() discovers lanes/phases.
         self.observation_space = spaces.Box(
             low=0, 
             high=np.inf, 
-            shape=(obs_dim,), 
+            shape=(1,), 
             dtype=np.float32
         )
         
@@ -108,6 +110,15 @@ class SumoEnv(gym.Env):
         self.sumo_running = True
         
         self.controller.setup()
+        num_lanes = len(self.controller.lanes)
+        num_phases = self.controller.num_phases
+        obs_dim = (num_lanes * 2) + num_phases # [MODIFIED - Task1] Match DQN preprocessed state: queues + waits + one-hot phase.
+        self.observation_space = spaces.Box(
+            low=0,
+            high=np.inf,
+            shape=(obs_dim,),
+            dtype=np.float32
+        )
         self.prev_total_wait = 0.0
         self.prev_total_time_loss = 0.0
         self.prev_phi = 0.0

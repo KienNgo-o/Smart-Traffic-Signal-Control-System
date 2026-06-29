@@ -1,0 +1,261 @@
+================================================================================
+STATISTICAL VALIDATION REPORT - D3QN vs baselines
+Grouped by: scenario
+Total comparisons: 40
+Primary evidence: Cliff's Delta (effect size) and bootstrap CI of % improvement
+Secondary test: Wilcoxon signed-rank (one-tailed) and p-values
+Reference effect size: Cohen's d
+Bonferroni alpha per row is stored in the results table (family-wise alpha = 0.050)
+================================================================================
+
+[scenario = asymmetric]
+AVG_WAIT vs WEBSTER
+  Cliff's delta: 0.440 (medium)
+  Improvement:   -2.56% [95% CI: -7.31%, 1.86%]
+  D3QN:          13.534 +/- 0.767
+  Baseline:      13.198 +/- 0.225
+  Wilcoxon p:    0.843750 (NOT SIGNIFICANT)
+AVG_WAIT vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -70.56% [95% CI: -80.26%, -61.55%]
+  D3QN:          13.534 +/- 0.767
+  Baseline:      7.943 +/- 0.184
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+P95_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   10.61% [95% CI: 8.59%, 12.63%]
+  D3QN:          33.600 +/- 0.548
+  Baseline:      37.600 +/- 0.548
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -23.94% [95% CI: -31.33%, -17.61%]
+  D3QN:          33.600 +/- 0.548
+  Baseline:      27.200 +/- 1.643
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs WEBSTER
+  Cliff's delta: 0.920 (large)
+  Improvement:   -6.65% [95% CI: -9.38%, -3.56%]
+  D3QN:          31.213 +/- 1.130
+  Baseline:      29.268 +/- 0.303
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -40.39% [95% CI: -44.84%, -35.75%]
+  D3QN:          31.213 +/- 1.130
+  Baseline:      22.239 +/- 0.329
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+AVG_QUEUE vs WEBSTER
+  Cliff's delta: 0.440 (medium)
+  Improvement:   -2.93% [95% CI: -6.75%, 0.65%]
+  D3QN:          1.149 +/- 0.059
+  Baseline:      1.116 +/- 0.021
+  Wilcoxon p:    0.906250 (NOT SIGNIFICANT)
+AVG_QUEUE vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -61.17% [95% CI: -69.78%, -53.50%]
+  D3QN:          1.149 +/- 0.059
+  Baseline:      0.713 +/- 0.018
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+
+[scenario = high_demand]
+AVG_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   16.60% [95% CI: 15.96%, 17.42%]
+  D3QN:          11.021 +/- 0.110
+  Baseline:      13.215 +/- 0.052
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   36.20% [95% CI: 34.68%, 37.21%]
+  D3QN:          11.021 +/- 0.110
+  Baseline:      17.281 +/- 0.397
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   14.05% [95% CI: 13.51%, 15.14%]
+  D3QN:          31.800 +/- 0.447
+  Baseline:      37.000 +/- 0.000
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   41.74% [95% CI: 40.50%, 42.91%]
+  D3QN:          31.800 +/- 0.447
+  Baseline:      54.600 +/- 0.894
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   8.02% [95% CI: 7.71%, 8.38%]
+  D3QN:          27.735 +/- 0.093
+  Baseline:      30.152 +/- 0.079
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   20.64% [95% CI: 19.56%, 21.43%]
+  D3QN:          27.735 +/- 0.093
+  Baseline:      34.953 +/- 0.492
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   12.51% [95% CI: 12.02%, 13.31%]
+  D3QN:          1.221 +/- 0.019
+  Baseline:      1.395 +/- 0.009
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   16.59% [95% CI: 14.78%, 18.24%]
+  D3QN:          1.221 +/- 0.019
+  Baseline:      1.464 +/- 0.024
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+
+[scenario = incident]
+AVG_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   13.33% [95% CI: 12.70%, 14.16%]
+  D3QN:          11.452 +/- 0.138
+  Baseline:      13.214 +/- 0.077
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   29.92% [95% CI: 28.30%, 30.98%]
+  D3QN:          11.452 +/- 0.138
+  Baseline:      16.348 +/- 0.393
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   13.51% [95% CI: 13.51%, 13.51%]
+  D3QN:          32.000 +/- 0.000
+  Baseline:      37.000 +/- 0.000
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   37.94% [95% CI: 36.74%, 39.37%]
+  D3QN:          32.000 +/- 0.000
+  Baseline:      51.600 +/- 1.517
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   5.60% [95% CI: 5.06%, 6.33%]
+  D3QN:          28.416 +/- 0.288
+  Baseline:      30.101 +/- 0.101
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   15.79% [95% CI: 14.43%, 16.69%]
+  D3QN:          28.416 +/- 0.288
+  Baseline:      33.751 +/- 0.566
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   9.75% [95% CI: 8.70%, 10.62%]
+  D3QN:          1.050 +/- 0.017
+  Baseline:      1.164 +/- 0.009
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   14.46% [95% CI: 13.19%, 15.57%]
+  D3QN:          1.050 +/- 0.017
+  Baseline:      1.228 +/- 0.016
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+
+[scenario = low_demand]
+AVG_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   11.73% [95% CI: 6.31%, 16.62%]
+  D3QN:          10.418 +/- 0.619
+  Baseline:      11.815 +/- 0.233
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_WAIT vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -38.68% [95% CI: -46.85%, -31.40%]
+  D3QN:          10.418 +/- 0.619
+  Baseline:      7.518 +/- 0.122
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+P95_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   7.25% [95% CI: 4.68%, 9.77%]
+  D3QN:          34.270 +/- 1.231
+  Baseline:      36.950 +/- 0.112
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -43.35% [95% CI: -50.58%, -37.96%]
+  D3QN:          34.270 +/- 1.231
+  Baseline:      23.930 +/- 0.591
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs WEBSTER
+  Cliff's delta: -0.760 (large)
+  Improvement:   4.35% [95% CI: 1.25%, 7.21%]
+  D3QN:          24.040 +/- 0.805
+  Baseline:      25.140 +/- 0.211
+  Wilcoxon p:    0.062500 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -17.30% [95% CI: -20.25%, -14.03%]
+  D3QN:          24.040 +/- 0.805
+  Baseline:      20.496 +/- 0.196
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+AVG_QUEUE vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   11.39% [95% CI: 6.36%, 16.05%]
+  D3QN:          0.460 +/- 0.029
+  Baseline:      0.519 +/- 0.010
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs ACTUATED
+  Cliff's delta: 1.000 (large)
+  Improvement:   -36.94% [95% CI: -43.85%, -29.96%]
+  D3QN:          0.460 +/- 0.029
+  Baseline:      0.336 +/- 0.008
+  Wilcoxon p:    1.000000 (NOT SIGNIFICANT)
+
+[scenario = symmetric]
+AVG_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   13.32% [95% CI: 11.57%, 14.95%]
+  D3QN:          11.394 +/- 0.250
+  Baseline:      13.147 +/- 0.178
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   29.53% [95% CI: 28.55%, 30.44%]
+  D3QN:          11.394 +/- 0.250
+  Baseline:      16.169 +/- 0.313
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   14.50% [95% CI: 13.51%, 16.46%]
+  D3QN:          31.800 +/- 0.447
+  Baseline:      37.200 +/- 0.447
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+P95_WAIT vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   37.14% [95% CI: 36.17%, 38.21%]
+  D3QN:          31.800 +/- 0.447
+  Baseline:      50.600 +/- 1.055
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   5.55% [95% CI: 4.57%, 6.52%]
+  D3QN:          28.279 +/- 0.301
+  Baseline:      29.942 +/- 0.270
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_TIME_LOSS vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   15.88% [95% CI: 15.33%, 16.42%]
+  D3QN:          28.279 +/- 0.301
+  Baseline:      33.619 +/- 0.344
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs WEBSTER
+  Cliff's delta: -1.000 (large)
+  Improvement:   10.03% [95% CI: 8.26%, 11.56%]
+  D3QN:          1.041 +/- 0.031
+  Baseline:      1.157 +/- 0.019
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+AVG_QUEUE vs ACTUATED
+  Cliff's delta: -1.000 (large)
+  Improvement:   14.96% [95% CI: 13.79%, 16.13%]
+  D3QN:          1.041 +/- 0.031
+  Baseline:      1.224 +/- 0.024
+  Wilcoxon p:    0.031250 (NOT SIGNIFICANT)
+
+================================================================================

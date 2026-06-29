@@ -152,7 +152,7 @@ def write_sumo_config(route_file, output_path):
         {
             "value": ",".join(
                 [
-                    as_posix_abs("sumo/tls.add.xml"),
+                    Path("sumo/tls.add.xml").resolve().as_posix(),
                     as_posix_abs("sumo/traffic.add.xml"),
                 ]
             )

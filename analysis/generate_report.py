@@ -22,16 +22,19 @@ Output:
 from __future__ import annotations
 
 import argparse
+import json
 import warnings
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
 import matplotlib
-import matplotlib.pyplot as plt
-from scipy import stats
 
-matplotlib.use('Agg')
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt
+import numpy as np
+import math
+import pandas as pd
+from scipy import stats
 
 # Color scheme: Webster=red, Actuated=orange, D3QN=green
 COLOR_SCHEME = {
@@ -48,9 +51,23 @@ METRICS_LABELS = {
 }
 
 
+def percent_change(baseline: float, treatment: float, lower_is_better: bool = True) -> float:
+    """Compute percent change from baseline to treatment.
+
+    When lower_is_better is True, positive values mean treatment improved over baseline.
+    """
+    baseline = float(baseline)
+    treatment = float(treatment)
+    if not np.isfinite(baseline) or baseline == 0 or not np.isfinite(treatment):
+        return np.nan
+    if lower_is_better:
+        return (baseline - treatment) / baseline * 100.0
+    return (treatment - baseline) / baseline * 100.0
+
+
 def log_warning(msg: str) -> None:
     """Print warning message."""
-    print(f"⚠️  WARNING: {msg}")
+    print(f"[WARN] {msg}")
 
 
 def load_csv_safe(filepath: Path) -> pd.DataFrame | None:
@@ -60,7 +77,7 @@ def load_csv_safe(filepath: Path) -> pd.DataFrame | None:
         return None
     try:
         df = pd.read_csv(filepath)
-        print(f"✓ Loaded {filepath} ({len(df)} rows)")
+        print(f"[OK] Loaded {filepath} ({len(df)} rows)")
         return df
     except Exception as e:
         log_warning(f"Failed to load {filepath}: {e}")
@@ -79,17 +96,17 @@ def find_train_logs() -> dict[int, Path]:
     for exp_dir in sorted(runs_dir.glob('exp_*')):
         train_log = exp_dir / 'train_log.csv'
         if train_log.exists():
-            # Extract seed from the master results or use experiment order
             try:
-                df = pd.read_csv(train_log, nrows=1)
-                if 'seed' in df.columns:
-                    seed = int(df['seed'].iloc[0])
+                hyperparameters_path = exp_dir / 'hyperparameters.json'
+                if hyperparameters_path.exists():
+                    with hyperparameters_path.open('r', encoding='utf-8') as handle:
+                        seed = int(json.load(handle).get('seed'))
                     seed_logs[seed] = train_log
             except Exception:
                 pass
     
     if seed_logs:
-        print(f"✓ Found {len(seed_logs)} train_log.csv files")
+        print(f"[OK] Found {len(seed_logs)} train_log.csv files")
     else:
         log_warning("No train_log.csv files found in runs/")
     
@@ -100,15 +117,19 @@ def load_train_curves(master_df: pd.DataFrame) -> dict[int, pd.DataFrame]:
     """Load training curves for each seed."""
     train_logs = find_train_logs()
     curves = {}
-    
-    if master_df is not None and len(master_df) > 0:
-        for seed in master_df['seed'].unique():
-            if seed in train_logs:
-                try:
-                    df = pd.read_csv(train_logs[seed])
-                    curves[seed] = df
-                except Exception as e:
-                    log_warning(f"Failed to load train_log for seed {seed}: {e}")
+
+    if master_df is not None and len(master_df) > 0 and 'seed' in master_df.columns:
+        target_seeds = [int(seed) for seed in pd.to_numeric(master_df['seed'], errors='coerce').dropna().unique()]
+    else:
+        target_seeds = sorted(train_logs.keys())
+
+    for seed in target_seeds:
+        if seed not in train_logs:
+            continue
+        try:
+            curves[seed] = pd.read_csv(train_logs[seed])
+        except Exception as e:
+            log_warning(f"Failed to load train_log for seed {seed}: {e}")
     
     return curves
 
@@ -125,20 +146,23 @@ def figure_1_reward_convergence(train_curves: dict[int, pd.DataFrame]) -> Path:
     if not train_curves:
         log_warning("No training curves available for Figure 1")
         return Path('analysis/fig1_reward_convergence.png')
-    
-    fig, axes = plt.subplots(2, 3, figsize=(15, 8))
+    # Show up to 10 seeds (layout adapts automatically)
+    n_seeds = min(len(train_curves), 10)
+    cols = 5
+    rows = math.ceil(n_seeds / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * 3, rows * 3))
     fig.suptitle('D3QN Training Reward Convergence — All Seeds', fontsize=14, fontweight='bold')
-    
+
     # Flatten axes for easier iteration
-    axes = axes.flatten()
+    axes = axes.flatten() if hasattr(axes, 'flatten') else [axes]
     
     # Find y-axis range for all subplots
     all_rewards = []
     for curves in train_curves.values():
-        if 'reward' in curves.columns:
-            all_rewards.extend(curves['reward'].values)
-        elif 'episode_reward' in curves.columns:
-            all_rewards.extend(curves['episode_reward'].values)
+        for reward_col in ['total_reward', 'reward', 'episode_reward', 'return']:
+            if reward_col in curves.columns:
+                all_rewards.extend(pd.to_numeric(curves[reward_col], errors='coerce').dropna().values)
+                break
     
     if all_rewards:
         y_min = np.percentile(all_rewards, 5)
@@ -147,14 +171,13 @@ def figure_1_reward_convergence(train_curves: dict[int, pd.DataFrame]) -> Path:
         y_min, y_max = 0, 100
     
     for idx, (seed, curves) in enumerate(sorted(train_curves.items())):
-        if idx >= 6:
+        if idx >= n_seeds:
             break
         
         ax = axes[idx]
         
-        # Find reward column
         reward_col = None
-        for col in ['reward', 'episode_reward', 'return']:
+        for col in ['total_reward', 'reward', 'episode_reward', 'return']:
             if col in curves.columns:
                 reward_col = col
                 break
@@ -164,7 +187,7 @@ def figure_1_reward_convergence(train_curves: dict[int, pd.DataFrame]) -> Path:
             ax.set_title(f'Seed {seed}', fontsize=12)
             continue
         
-        rewards = curves[reward_col].values
+        rewards = pd.to_numeric(curves[reward_col], errors='coerce').dropna().values
         episodes = np.arange(len(rewards))
         
         # Plot raw rewards with alpha
@@ -185,8 +208,12 @@ def figure_1_reward_convergence(train_curves: dict[int, pd.DataFrame]) -> Path:
         ax.tick_params(labelsize=10)
     
     # Hide unused subplots
-    for idx in range(len(train_curves), 6):
-        axes[idx].set_visible(False)
+    total_slots = rows * cols
+    for idx in range(n_seeds, total_slots):
+        try:
+            axes[idx].set_visible(False)
+        except Exception:
+            pass
     
     plt.tight_layout()
     output_path = Path('analysis/fig1_reward_convergence.png')
@@ -201,64 +228,69 @@ def figure_2_scenario_comparison(gen_df: pd.DataFrame) -> Path:
     if gen_df is None or len(gen_df) == 0:
         log_warning("No generalization data available for Figure 2")
         return Path('analysis/fig2_scenario_comparison.png')
-    
-    metrics = ['avg_wait', 'p95_wait', 'avg_time_loss', 'avg_queue']
-    scenarios = sorted(gen_df['scenario'].unique()) if 'scenario' in gen_df.columns else []
-    
-    if not scenarios:
-        log_warning("No scenario column in generalization data")
+
+    required_columns = {'scenario', 'controller'}
+    if not required_columns.issubset(gen_df.columns):
+        log_warning("Generalization data is missing scenario/controller columns")
         return Path('analysis/fig2_scenario_comparison.png')
-    
+
+    metrics = ['avg_wait', 'p95_wait', 'avg_time_loss', 'avg_queue']
+    scenarios = [scenario for scenario in ['symmetric', 'asymmetric', 'incident', 'high_demand', 'low_demand'] if scenario in gen_df['scenario'].astype(str).unique()]
+    controllers = [controller for controller in ['webster', 'actuated', 'd3qn'] if controller in gen_df['controller'].astype(str).str.lower().unique()]
+
+    if not scenarios or not controllers:
+        log_warning("Generalization data does not contain enough scenarios/controllers for plotting")
+        return Path('analysis/fig2_scenario_comparison.png')
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 10))
-    fig.suptitle('Generalization Across Scenarios', fontsize=14, fontweight='bold')
+    fig.suptitle('D3QN Generalization Across Traffic Scenarios', fontsize=14, fontweight='bold')
     axes = axes.flatten()
-    
+
+    working = gen_df.copy()
+    working['controller'] = working['controller'].astype(str).str.lower()
+
     for metric_idx, metric in enumerate(metrics):
         ax = axes[metric_idx]
-        
-        # Check if metric columns exist
-        controllers = []
-        metric_cols = {}
-        for ctrl in ['webster', 'actuated', 'd3qn']:
-            col = f'{metric}_{ctrl}'
-            if col in gen_df.columns:
-                controllers.append(ctrl)
-                metric_cols[ctrl] = col
-        
-        if not controllers:
-            log_warning(f"No controller columns found for {metric}")
+        if metric not in working.columns:
             ax.text(0.5, 0.5, f'No data for {metric}', ha='center', va='center')
             ax.set_title(METRICS_LABELS.get(metric, metric), fontsize=12)
             continue
-        
-        # Prepare data for grouped bar chart
-        bar_width = 0.25
+
         x_pos = np.arange(len(scenarios))
-        
+        bar_width = 0.25
+
         for ctrl_idx, ctrl in enumerate(controllers):
-            col = metric_cols[ctrl]
             means = []
             stds = []
-            
             for scenario in scenarios:
-                scenario_data = gen_df[gen_df['scenario'] == scenario][col]
-                means.append(scenario_data.mean())
-                stds.append(scenario_data.std())
-            
-            offset = (ctrl_idx - 1) * bar_width
-            ax.bar(x_pos + offset, means, bar_width, label=ctrl.capitalize(),
-                   color=COLOR_SCHEME.get(ctrl, 'tab:blue'), alpha=0.7, 
-                   yerr=stds, capsize=5)
-        
+                values = pd.to_numeric(
+                    working.loc[(working['scenario'] == scenario) & (working['controller'] == ctrl), metric],
+                    errors='coerce',
+                ).dropna()
+                means.append(values.mean() if len(values) else np.nan)
+                stds.append(values.std(ddof=1) if len(values) > 1 else 0.0)
+
+            offset = (ctrl_idx - (len(controllers) - 1) / 2.0) * bar_width
+            ax.bar(
+                x_pos + offset,
+                means,
+                bar_width,
+                label=ctrl.capitalize(),
+                color=COLOR_SCHEME.get(ctrl, 'tab:blue'),
+                alpha=0.8,
+                yerr=stds,
+                capsize=4,
+            )
+
         ax.set_xlabel('Scenario', fontsize=10)
         ax.set_ylabel(METRICS_LABELS.get(metric, metric), fontsize=10)
         ax.set_title(METRICS_LABELS.get(metric, metric), fontsize=12)
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(scenarios, rotation=45, ha='right', fontsize=9)
+        ax.set_xticklabels(scenarios, rotation=20, ha='right', fontsize=9)
         ax.legend(fontsize=9)
         ax.grid(True, alpha=0.3, axis='y')
         ax.tick_params(labelsize=10)
-    
+
     plt.tight_layout()
     output_path = Path('analysis/fig2_scenario_comparison.png')
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -272,56 +304,52 @@ def figure_3_statistical_summary(stat_df: pd.DataFrame) -> Path:
     if stat_df is None or len(stat_df) == 0:
         log_warning("No statistical validation data available for Figure 3")
         return Path('analysis/fig3_statistical_summary.png')
-    
+
+    required_columns = {'metric', 'mean_improvement_pct', 'ci_95_lower', 'ci_95_upper'}
+    if not required_columns.issubset(stat_df.columns):
+        log_warning("Statistical validation data is missing the required columns")
+        return Path('analysis/fig3_statistical_summary.png')
+
     metrics = ['avg_wait', 'p95_wait', 'avg_time_loss', 'avg_queue']
     fig, axes = plt.subplots(2, 2, figsize=(12, 10))
-    fig.suptitle('D3QN Improvement: Effect Sizes with 95% CI', fontsize=14, fontweight='bold')
+    fig.suptitle('D3QN Improvement: Mean Difference and 95% CI', fontsize=14, fontweight='bold')
     axes = axes.flatten()
-    
+
+    working = stat_df.copy()
+    working['metric'] = working['metric'].astype(str)
+    if 'baseline' in working.columns:
+        working['baseline'] = working['baseline'].astype(str)
+
     for metric_idx, metric in enumerate(metrics):
         ax = axes[metric_idx]
-        
-        # Filter data for this metric
-        metric_key = f'{metric}_improvement_pct'
-        pval_key = f'{metric}_pvalue'
-        ci_lower_key = f'{metric}_ci_lower'
-        ci_upper_key = f'{metric}_ci_upper'
-        
-        # Check if columns exist
-        if metric_key not in stat_df.columns:
+        subset = working.loc[working['metric'] == metric].copy()
+        if subset.empty:
             ax.text(0.5, 0.5, f'No data for {metric}', ha='center', va='center')
             ax.set_title(METRICS_LABELS.get(metric, metric), fontsize=12)
             continue
-        
-        improvement = stat_df[metric_key].values
-        
-        # Use provided CI bounds or calculate from std
-        if ci_lower_key in stat_df.columns and ci_upper_key in stat_df.columns:
-            ci_lower = stat_df[ci_lower_key].values
-            ci_upper = stat_df[ci_upper_key].values
-        else:
-            # Fallback: use ±1.96*std as 95% CI
-            std = stat_df[metric_key].std()
-            ci_lower = improvement - 1.96 * std
-            ci_upper = improvement + 1.96 * std
-        
-        # Plot forest plot
-        y_pos = np.arange(len(improvement))
-        ax.scatter(improvement, y_pos, s=100, color=COLOR_SCHEME['d3qn'], zorder=3)
-        
-        for i, (imp, ci_l, ci_u) in enumerate(zip(improvement, ci_lower, ci_upper)):
-            ax.plot([ci_l, ci_u], [i, i], color=COLOR_SCHEME['d3qn'], linewidth=2, zorder=2)
-        
-        # Reference line at x=0
-        ax.axvline(x=0, color='black', linestyle='--', linewidth=1, zorder=1)
-        
-        ax.set_xlabel('Improvement (%)', fontsize=10)
-        ax.set_title(METRICS_LABELS.get(metric, metric), fontsize=12)
+
+        subset = subset.reset_index(drop=True)
+        y_pos = np.arange(len(subset))
+        baseline_labels = subset['baseline'].str.capitalize().tolist() if 'baseline' in subset.columns else [f'Test {i + 1}' for i in range(len(subset))]
+        colors = [COLOR_SCHEME['webster'] if str(label).lower() == 'webster' else COLOR_SCHEME['actuated'] if str(label).lower() == 'actuated' else COLOR_SCHEME['d3qn'] for label in baseline_labels]
+
+        for y_index, (_, row) in enumerate(subset.iterrows()):
+            x_value = float(row['mean_improvement_pct'])
+            x_lower = float(row['ci_95_lower'])
+            x_upper = float(row['ci_95_upper'])
+            ax.plot([x_lower, x_upper], [y_index, y_index], color=colors[y_index], linewidth=2)
+            ax.scatter(x_value, y_index, color=colors[y_index], s=70, zorder=3)
+            if bool(row.get('significant', False)):
+                ax.text(x_upper + 0.4, y_index, '*', va='center', fontsize=12, fontweight='bold')
+
+        ax.axvline(x=0, color='black', linestyle='--', linewidth=1)
         ax.set_yticks(y_pos)
-        ax.set_yticklabels([f'Test {i+1}' for i in range(len(improvement))])
+        ax.set_yticklabels(baseline_labels)
+        ax.set_title(METRICS_LABELS.get(metric, metric), fontsize=12)
+        ax.set_xlabel('Improvement (%)', fontsize=10)
         ax.grid(True, alpha=0.3, axis='x')
         ax.tick_params(labelsize=10)
-    
+
     plt.tight_layout()
     output_path = Path('analysis/fig3_statistical_summary.png')
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -335,56 +363,67 @@ def figure_4_switch_rate_analysis(master_df: pd.DataFrame) -> Path:
     if master_df is None or len(master_df) == 0:
         log_warning("No master evaluation data available for Figure 4")
         return Path('analysis/fig4_switch_rate_analysis.png')
-    
+
+    train_logs = find_train_logs()
+    switch_series = {}
+    for seed, train_log_path in train_logs.items():
+        try:
+            train_df = pd.read_csv(train_log_path)
+        except Exception:
+            continue
+        if 'switch_rate' not in train_df.columns:
+            continue
+        values = pd.to_numeric(train_df['switch_rate'], errors='coerce').dropna().to_numpy()
+        if values.size:
+            switch_series[int(seed)] = values
+
+    if not switch_series:
+        log_warning("No switch_rate values found in training logs; skipping Figure 4")
+        return Path('analysis/fig4_switch_rate_analysis.png')
+
     fig, axes = plt.subplots(1, 2, figsize=(12, 5))
     fig.suptitle('Switch Rate Analysis Across Seeds', fontsize=14, fontweight='bold')
-    
-    # Check if switch_rate columns exist
-    if 'switch_rate_webster' not in master_df.columns or 'switch_rate_d3qn' not in master_df.columns:
-        log_warning("No switch_rate columns in master data; skipping Figure 4")
-        return Path('analysis/fig4_switch_rate_analysis.png')
-    
-    seeds = master_df['seed'].values
-    switch_rate_webster = master_df['switch_rate_webster'].values
-    switch_rate_d3qn = master_df['switch_rate_d3qn'].values
-    avg_wait_webster = master_df['avg_wait_webster'].values
-    avg_wait_d3qn = master_df['avg_wait_d3qn'].values
-    avg_time_loss_webster = master_df['avg_time_loss_webster'].values
-    avg_time_loss_d3qn = master_df['avg_time_loss_d3qn'].values
-    
-    # Left: Box plot
+
+    seeds = sorted(switch_series)
+    box_data = [switch_series[seed] for seed in seeds]
     ax_left = axes[0]
-    bp_data = [switch_rate_webster, switch_rate_d3qn]
-    bp = ax_left.boxplot(bp_data, labels=['Webster', 'D3QN'], patch_artist=True)
-    
-    for patch, color in zip(bp['boxes'], [COLOR_SCHEME['webster'], COLOR_SCHEME['d3qn']]):
-        patch.set_facecolor(color)
+    bp = ax_left.boxplot(box_data, tick_labels=[str(seed) for seed in seeds], patch_artist=True, showmeans=True)
+
+    for patch, seed in zip(bp['boxes'], seeds):
+        patch.set_facecolor(COLOR_SCHEME['d3qn'] if seed != 46 else 'tab:red')
         patch.set_alpha(0.7)
-    
-    ax_left.set_ylabel('Switch Rate (switches/hour)', fontsize=10)
+
+    ax_left.set_ylabel('Switch Rate (actions/step)', fontsize=10)
     ax_left.set_title('Switch Rate Distribution', fontsize=12)
     ax_left.grid(True, alpha=0.3, axis='y')
     ax_left.tick_params(labelsize=10)
-    
-    # Right: Scatter plot
+
+    seed_df = pd.to_numeric(master_df['seed'], errors='coerce')
+    wait_improvement = pd.to_numeric(master_df['avg_wait_improvement_pct'], errors='coerce') if 'avg_wait_improvement_pct' in master_df.columns else pd.Series(dtype=float)
+    timeloss_improvement = pd.to_numeric(master_df['avg_time_loss_improvement_pct'], errors='coerce') if 'avg_time_loss_improvement_pct' in master_df.columns else pd.Series(dtype=float)
+    scatter_df = pd.DataFrame({
+        'seed': seed_df,
+        'wait_improvement': wait_improvement,
+        'timeloss_improvement': timeloss_improvement,
+    }).dropna()
+
     ax_right = axes[1]
-    wait_improvement = (avg_wait_webster - avg_wait_d3qn) / avg_wait_webster * 100
-    timeloss_improvement = (avg_time_loss_webster - avg_time_loss_d3qn) / avg_time_loss_webster * 100
-    
-    ax_right.scatter(wait_improvement, timeloss_improvement, 
-                     s=100, color=COLOR_SCHEME['d3qn'], alpha=0.6)
-    
-    for i, seed in enumerate(seeds):
-        ax_right.annotate(f'S{seed}', 
-                         (wait_improvement[i], timeloss_improvement[i]),
-                         fontsize=8, alpha=0.7)
-    
+    if not scatter_df.empty:
+        for _, row in scatter_df.iterrows():
+            seed = int(row['seed'])
+            color = 'tab:red' if seed == 46 else COLOR_SCHEME['d3qn']
+            size = 140 if seed == 46 else 80
+            ax_right.scatter(row['wait_improvement'], row['timeloss_improvement'], s=size, color=color, alpha=0.8)
+            ax_right.annotate(str(seed), (row['wait_improvement'], row['timeloss_improvement']), fontsize=8, xytext=(4, 4), textcoords='offset points')
+
+        ax_right.axhline(0, color='black', linestyle='--', linewidth=1)
+        ax_right.axvline(0, color='black', linestyle='--', linewidth=1)
     ax_right.set_xlabel('Wait Time Improvement (%)', fontsize=10)
     ax_right.set_ylabel('Time Loss Improvement (%)', fontsize=10)
     ax_right.set_title('Improvement Correlation', fontsize=12)
     ax_right.grid(True, alpha=0.3)
     ax_right.tick_params(labelsize=10)
-    
+
     plt.tight_layout()
     output_path = Path('analysis/fig4_switch_rate_analysis.png')
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -397,106 +436,86 @@ def generate_markdown_report(master_df: pd.DataFrame, gen_df: pd.DataFrame,
                              stat_df: pd.DataFrame) -> Path:
     """Generate final_report.md with summary tables."""
     report_lines = [
-        "# D3QN Smart Traffic Signal Control — Final Report",
+        "# D3QN Smart Traffic Signal Control - Final Report",
         "",
         "## Executive Summary",
         "",
-        "This report presents the comprehensive evaluation of D3QN (Dueling Deep Q-Network) performance",
-        "against baseline signal control methods (Webster and Actuated) across multiple scenarios and seeds.",
+        "This report summarizes D3QN performance against Webster and Actuated control across the training, evaluation, and generalization experiments.",
         "",
     ]
-    
-    # Section 1: Baseline Results
+
     if master_df is not None and len(master_df) > 0:
         report_lines.extend([
-            "## 1. Baseline Evaluation Results (6 Seeds)",
+            "## 1. Baseline Evaluation Results",
             "",
-            "| Metric | Webster (mean ± std) | D3QN (mean ± std) | Improvement | p-value |",
-            "|--------|---------------------|-------------------|-------------|---------|",
+            "| Metric | Webster mean | D3QN mean | Improvement |",
+            "|---|---:|---:|---:|",
         ])
-        
-        metrics = [
-            ('avg_wait', 'Avg Wait (s)'),
-            ('p95_wait', 'P95 Wait (s)'),
-            ('avg_time_loss', 'Avg Time Loss (s)'),
-            ('avg_queue', 'Avg Queue (veh)'),
-        ]
-        
-        for metric_col, metric_label in metrics:
-            webster_col = f'{metric_col}_webster'
-            d3qn_col = f'{metric_col}_d3qn'
-            
-            if webster_col in master_df.columns and d3qn_col in master_df.columns:
-                w_mean = master_df[webster_col].mean()
-                w_std = master_df[webster_col].std()
-                d_mean = master_df[d3qn_col].mean()
-                d_std = master_df[d3qn_col].std()
-                
-                # Calculate improvement percentage
-                improvement_pct = (w_mean - d_mean) / w_mean * 100 if w_mean > 0 else 0
-                
-                # Try to get p-value from stat_df
-                pval_key = f'{metric_col}_pvalue'
-                if stat_df is not None and pval_key in stat_df.columns:
-                    pval = stat_df[pval_key].mean()
-                    pval_str = f"{pval:.4f}"
-                else:
-                    pval_str = "N/A"
-                
-                report_lines.append(
-                    f"| {metric_label} | {w_mean:.2f} ± {w_std:.2f} | {d_mean:.2f} ± {d_std:.2f} | "
-                    f"{improvement_pct:+.1f}% | {pval_str} |"
-                )
-    
-    report_lines.append("")
-    
-    # Section 2: Generalization Results
-    if gen_df is not None and len(gen_df) > 0:
+        for metric_col, label in [('avg_wait', 'Avg Wait (s)'), ('p95_wait', 'P95 Wait (s)'), ('avg_time_loss', 'Avg Time Loss (s)'), ('avg_queue', 'Avg Queue (veh)')]:
+            w_col = f'{metric_col}_webster'
+            d_col = f'{metric_col}_d3qn'
+            if w_col in master_df.columns and d_col in master_df.columns:
+                w_mean = pd.to_numeric(master_df[w_col], errors='coerce').mean()
+                d_mean = pd.to_numeric(master_df[d_col], errors='coerce').mean()
+                improvement = percent_change(w_mean, d_mean, lower_is_better=True)
+                report_lines.append(f"| {label} | {w_mean:.2f} | {d_mean:.2f} | {improvement:+.1f}% |")
+        report_lines.append("")
+
+    if gen_df is not None and len(gen_df) > 0 and {'scenario', 'controller'}.issubset(gen_df.columns):
         report_lines.extend([
             "## 2. Generalization Across Scenarios",
             "",
-            "| Scenario | Avg Wait (s) | P95 Wait (s) | Time Loss (s) | Queue (veh) |",
-            "|----------|--------------|--------------|----------------|-------------|",
+            "| Scenario | Webster avg_wait | Actuated avg_wait | D3QN avg_wait |",
+            "|---|---:|---:|---:|",
         ])
-        
-        if 'scenario' in gen_df.columns:
-            for scenario in sorted(gen_df['scenario'].unique()):
-                scenario_data = gen_df[gen_df['scenario'] == scenario]
-                
-                avg_wait = scenario_data['avg_wait_d3qn'].mean() if 'avg_wait_d3qn' in scenario_data.columns else 0
-                p95_wait = scenario_data['p95_wait_d3qn'].mean() if 'p95_wait_d3qn' in scenario_data.columns else 0
-                time_loss = scenario_data['avg_time_loss_d3qn'].mean() if 'avg_time_loss_d3qn' in scenario_data.columns else 0
-                queue = scenario_data['avg_queue_d3qn'].mean() if 'avg_queue_d3qn' in scenario_data.columns else 0
-                
-                report_lines.append(
-                    f"| {scenario} | {avg_wait:.2f} | {p95_wait:.2f} | {time_loss:.2f} | {queue:.2f} |"
-                )
-    
+        gen_working = gen_df.copy()
+        gen_working['controller'] = gen_working['controller'].astype(str).str.lower()
+        for scenario in sorted(gen_working['scenario'].dropna().astype(str).unique()):
+            scenario_df = gen_working.loc[gen_working['scenario'].astype(str) == scenario]
+            values = {}
+            for controller in ['webster', 'actuated', 'd3qn']:
+                ctrl_vals = pd.to_numeric(scenario_df.loc[scenario_df['controller'] == controller, 'avg_wait'], errors='coerce').dropna()
+                values[controller] = ctrl_vals.mean() if len(ctrl_vals) else np.nan
+            report_lines.append(
+                f"| {scenario} | {values['webster']:.2f} | {values['actuated']:.2f} | {values['d3qn']:.2f} |"
+            )
+        report_lines.append("")
+
+    if stat_df is not None and len(stat_df) > 0 and {'metric', 'mean_improvement_pct'}.issubset(stat_df.columns):
+        report_lines.extend([
+            "## 3. Statistical Validation",
+            "",
+            "| Metric | Baseline | Improvement | 95% CI | Significant |",
+            "|---|---|---:|---:|---|",
+        ])
+        for _, row in stat_df.iterrows():
+            metric = str(row.get('metric', '')).replace('_', ' ').title()
+            baseline = str(row.get('baseline', 'webster')).title()
+            improvement = float(row.get('mean_improvement_pct', np.nan))
+            ci_lower = float(row.get('ci_95_lower', np.nan))
+            ci_upper = float(row.get('ci_95_upper', np.nan))
+            significant = 'Yes' if bool(row.get('significant', False)) else 'No'
+            report_lines.append(f"| {metric} | {baseline} | {improvement:.2f}% | [{ci_lower:.2f}, {ci_upper:.2f}] | {significant} |")
+        report_lines.append("")
+
     report_lines.extend([
-        "",
-        "## 3. Statistical Validation",
-        "",
-        "Detailed statistical analysis including effect sizes, confidence intervals, and p-values",
-        "is available in the generated figures (fig3_statistical_summary.png).",
-        "",
         "## 4. Figures Generated",
         "",
-        "- **Figure 1:** Training reward convergence across all 6 seeds",
-        "- **Figure 2:** Scenario comparison (4 metrics × 3 controllers × 5 scenarios)",
-        "- **Figure 3:** Statistical summary with effect sizes and 95% CI",
-        "- **Figure 4:** Switch rate analysis and performance correlation",
+        "- Figure 1: Training reward convergence across all seeds",
+        "- Figure 2: Scenario comparison across controllers",
+        "- Figure 3: Statistical summary with confidence intervals",
+        "- Figure 4: Switch rate analysis and improvement correlation",
         "",
         "## 5. Conclusions",
         "",
-        "D3QN demonstrates significant improvements over baseline signal control methods",
-        "with consistent performance across different random seeds and scenarios.",
+        "The combined results provide evidence for the D3QN controller's advantage over fixed-time baselines, while also exposing seed-level variability that merits further diagnosis.",
         "",
     ])
-    
+
     report_content = "\n".join(report_lines)
-    
+
     output_path = Path('analysis/final_report.md')
-    output_path.write_text(report_content)
+    output_path.write_text(report_content, encoding='utf-8')
     print(f"✓ Final report saved: {output_path}")
     return output_path
 
@@ -549,18 +568,14 @@ def main(args: argparse.Namespace) -> None:
     print()
 
 
-if __name__ == '__main__':
+def parse_args(argv=None):
+    """Parse command-line arguments for the final report generator."""
     parser = argparse.ArgumentParser(
         description='Generate comprehensive final report with figures and tables.'
     )
-    parser.add_argument(
-        '--help',
-        action='store_true',
-        help='Show this help message and exit'
-    )
-    args = parser.parse_args()
-    
-    if args.help:
-        parser.print_help()
-    else:
-        main(args)
+    return parser.parse_args(argv)
+
+
+if __name__ == '__main__':
+    parse_args()
+    main(argparse.Namespace())

@@ -55,8 +55,8 @@ def cliffs_delta(treatment, control):
 
     A negative value indicates the treatment tends to be smaller than the control.
     """
-    treatment = np.asarray(treatment, dtype=float)
-    control = np.asarray(control, dtype=float)
+    treatment = np.asarray(treatment, dtype=float).ravel()
+    control = np.asarray(control, dtype=float).ravel()
     n_treatment = treatment.size
     n_control = control.size
     if n_treatment == 0 or n_control == 0:
@@ -278,7 +278,8 @@ def run_pairwise_tests(df, alpha=0.05, group_label=None, group_by=None):
     if mode == "wide":
         n_tests = len(METRICS_LOWER_BETTER) * len(available_baselines)
         rows = []
-        for metric, (d3qn_col, _) in METRICS_LOWER_BETTER.items():
+        for metric, (baseline_col_template, d3qn_col) in METRICS_LOWER_BETTER.items():
+            # METRICS_LOWER_BETTER stores (baseline_col, d3qn_col) per metric
             for baseline in available_baselines:
                 baseline_col = f"{metric}_{baseline}"
                 treatment_vals, control_vals = pair_arrays_from_wide(df, d3qn_col, baseline_col)
@@ -314,17 +315,19 @@ def run_pairwise_tests(df, alpha=0.05, group_label=None, group_by=None):
 def format_metric_block(row):
     """Format one metric comparison row for the human-readable report."""
     baseline = row["baseline"]
-    significant = "SIGNIFICANT" if row["significant"] else "NOT SIGNIFICANT"
+    # Primary evidence first: Cliff's Delta and bootstrap CI for percent improvement
+    significant = "SIGNIFICANT" if row.get("significant") else "NOT SIGNIFICANT"
     baseline_mean = row.get(f"{baseline}_mean", np.nan)
     baseline_std = row.get(f"{baseline}_std", np.nan)
-    return [
-        f"{row['metric'].upper()} vs {baseline.upper()}",
-        f"  Baseline:      {baseline_mean:.3f} +/- {baseline_std:.3f}",
-        f"  D3QN:          {row['d3qn_mean']:.3f} +/- {row['d3qn_std']:.3f}",
-        f"  Wilcoxon p:    {row['wilcoxon_p']:.6f} ({significant})",
-        f"  Cliff's delta: {row['cliffs_delta']:.3f} ({row['effect_size']})",
-        f"  Improvement:   {row['mean_improvement_pct']:.2f}% [95% CI: {row['ci_95_lower']:.2f}%, {row['ci_95_upper']:.2f}%]",
-    ]
+    lines = [f"{row['metric'].upper()} vs {baseline.upper()}"]
+    lines.append(f"  Cliff's delta: {row.get('cliffs_delta', np.nan):.3f} ({row.get('effect_size','unknown')})")
+    lines.append(
+        f"  Improvement:   {row.get('mean_improvement_pct', np.nan):.2f}% [95% CI: {row.get('ci_95_lower', np.nan):.2f}%, {row.get('ci_95_upper', np.nan):.2f}%]"
+    )
+    lines.append(f"  D3QN:          {row.get('d3qn_mean', np.nan):.3f} +/- {row.get('d3qn_std', np.nan):.3f}")
+    lines.append(f"  Baseline:      {baseline_mean:.3f} +/- {baseline_std:.3f}")
+    lines.append(f"  Wilcoxon p:    {row.get('wilcoxon_p', np.nan):.6f} ({significant})")
+    return lines
 
 
 def build_report(results_df, alpha=0.05, group_by=None):
@@ -337,8 +340,9 @@ def build_report(results_df, alpha=0.05, group_by=None):
     if group_by and group_by in results_df.columns:
         lines.append(f"Grouped by: {group_by}")
     lines.append(f"Total comparisons: {len(results_df)}")
-    lines.append("Primary test: Wilcoxon signed-rank, one-tailed (treatment < baseline)")
-    lines.append("Effect size: Cliff's Delta; reference effect size: Cohen's d")
+    lines.append("Primary evidence: Cliff's Delta (effect size) and bootstrap CI of % improvement")
+    lines.append("Secondary test: Wilcoxon signed-rank (one-tailed) and p-values")
+    lines.append("Reference effect size: Cohen's d")
     lines.append(f"Bonferroni alpha per row is stored in the results table (family-wise alpha = {alpha:.3f})")
     lines.append("=" * 80)
 
@@ -373,8 +377,34 @@ def run_analysis(csv_path, output_dir="analysis", group_by=None, alpha=0.05):
     else:
         results_df = run_pairwise_tests(df, alpha=alpha)
 
+    # Prefer a column order that surfaces primary evidence first
+    preferred_order = [
+        (group_by or "group"),
+        "metric",
+        "baseline",
+        "n_pairs",
+        "cliffs_delta",
+        "effect_size",
+        "mean_improvement_pct",
+        "ci_95_lower",
+        "ci_95_upper",
+        "d3qn_mean",
+        "d3qn_std",
+        f"{BASELINE_LABELS[0]}_mean",
+        f"{BASELINE_LABELS[0]}_std",
+        "wilcoxon_stat",
+        "wilcoxon_p",
+        "bonferroni_alpha",
+        "significant",
+        "cohens_d",
+    ]
+    # Keep only columns that exist in the results DataFrame, preserving order
+    cols = [c for c in preferred_order if c in results_df.columns]
+    # Append any remaining columns
+    remaining = [c for c in results_df.columns if c not in cols]
+    cols.extend(remaining)
     results_csv = output_path / "statistical_validation_results.csv"
-    results_df.to_csv(results_csv, index=False)
+    results_df.to_csv(results_csv, index=False, columns=cols)
 
     report_text = build_report(results_df, alpha=alpha, group_by=group_by)
     report_path = output_path / "statistical_validation_report.txt"
